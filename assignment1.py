@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from statsmodels.tsa.statespace.varmax import VARMAX
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 # ----------------------------------------------------
 # 1. Load data
@@ -15,51 +15,38 @@ trainData = trainData.sort_values("Timestamp").set_index("Timestamp")
 testData  = testData.sort_values("Timestamp").set_index("Timestamp")
 
 # ----------------------------------------------------
-# 2. Endogenous variables
+# 2. Endogenous and exogenous variables
 # ----------------------------------------------------
-# Use trips + hour, but scale hour to reduce imbalance
-endog = trainData[["trips", "hour"]].astype(float)
-endog["hour"] = endog["hour"] / 23.0   # normalization helps stability
+y = trainData["trips"].astype(float)
+
+# Exogenous regressors: hour, month, day
+train_exog = trainData[["hour", "month", "day"]].astype(float)
+test_exog  = testData[["hour", "month", "day"]].astype(float)
 
 # ----------------------------------------------------
-# 3. Exogenous variables
+# 3. Define SARIMAX model
 # ----------------------------------------------------
-# Add richer structure than your classmate: month, day, and weekday
-train_exog = pd.DataFrame({
-    "month": trainData["month"].astype(float),
-    "day": trainData["day"].astype(float),
-    "weekday": trainData.index.dayofweek.astype(float)
-})
-
-test_exog = pd.DataFrame({
-    "month": testData["month"].astype(float),
-    "day": testData["day"].astype(float),
-    "weekday": testData.index.dayofweek.astype(float)
-})
-
-# ----------------------------------------------------
-# 4. Define model
-# ----------------------------------------------------
-# VARMAX(1,1) but with a different trend and richer exog
-model = VARMAX(
-    endog=endog,
+# ARMA(1,1) with exogenous regressors
+model = SARIMAX(
+    y,
     exog=train_exog,
-    order=(1, 1),
-    trend="t"   # time trend instead of constant → original + improves fit
+    order=(1, 0, 1),
+    trend="c",
+    enforce_stationarity=False,
+    enforce_invertibility=False
 )
 
 # ----------------------------------------------------
-# 5. Fit model
+# 4. Fit model
 # ----------------------------------------------------
-modelFit = model.fit(disp=False, maxiter=200)
+modelFit = model.fit(disp=False)
 
 # ----------------------------------------------------
-# 6. Forecast January
+# 5. Forecast January
 # ----------------------------------------------------
-forecast = modelFit.forecast(
+pred = modelFit.forecast(
     steps=len(testData),
     exog=test_exog
 )
 
-# Extract trips forecast
-pred = forecast["trips"].values
+pred = np.array(pred)
