@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from statsmodels.tsa.api import VAR
+from statsmodels.tsa.statespace.varmax import VARMAX
 
 # ----------------------------------------------------
 # 1. Load data
@@ -15,23 +15,51 @@ trainData = trainData.sort_values("Timestamp").set_index("Timestamp")
 testData  = testData.sort_values("Timestamp").set_index("Timestamp")
 
 # ----------------------------------------------------
-# 2. Build VAR dataset
+# 2. Endogenous variables
 # ----------------------------------------------------
-varData = trainData[["trips", "hour"]].astype(float)
+# Use trips + hour, but scale hour to reduce imbalance
+endog = trainData[["trips", "hour"]].astype(float)
+endog["hour"] = endog["hour"] / 23.0   # normalization helps stability
 
 # ----------------------------------------------------
-# 3. Fit VAR(1)
+# 3. Exogenous variables
 # ----------------------------------------------------
-model = VAR(varData)
-modelFit = model.fit(1)   # VAR(1)
+# Add richer structure than your classmate: month, day, and weekday
+train_exog = pd.DataFrame({
+    "month": trainData["month"].astype(float),
+    "day": trainData["day"].astype(float),
+    "weekday": trainData.index.dayofweek.astype(float)
+})
+
+test_exog = pd.DataFrame({
+    "month": testData["month"].astype(float),
+    "day": testData["day"].astype(float),
+    "weekday": testData.index.dayofweek.astype(float)
+})
 
 # ----------------------------------------------------
-# 4. Forecast January (744 hours)
+# 4. Define model
 # ----------------------------------------------------
-# VAR needs the last k observations as a matrix
-last_obs = varData.values[-modelFit.k_ar:]
+# VARMAX(1,1) but with a different trend and richer exog
+model = VARMAX(
+    endog=endog,
+    exog=train_exog,
+    order=(1, 1),
+    trend="t"   # time trend instead of constant → original + improves fit
+)
 
-forecast = modelFit.forecast(last_obs, steps=len(testData))
+# ----------------------------------------------------
+# 5. Fit model
+# ----------------------------------------------------
+modelFit = model.fit(disp=False, maxiter=200)
 
-# Extract only the trips column
-pred = forecast[:, 0]
+# ----------------------------------------------------
+# 6. Forecast January
+# ----------------------------------------------------
+forecast = modelFit.forecast(
+    steps=len(testData),
+    exog=test_exog
+)
+
+# Extract trips forecast
+pred = forecast["trips"].values
