@@ -23,7 +23,7 @@ X_test = testData[["year", "month", "day", "hour"]]
 # ----------------------------------------------------
 # 3. Define GAM model (original structure)
 # ----------------------------------------------------
-# Smooth all four predictors (different from your classmate)
+# Smooth all four predictors
 model = LinearGAM(
     s(0) + s(1) + s(2) + s(3)
 )
